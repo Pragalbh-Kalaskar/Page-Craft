@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PageCraft – PDF Page Extractor</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📑</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --primary: #4f46e5; --primary-dark: #4338ca; --bg: #f3f4f8;
+    --text: #1f2937; --muted: #6b7280; --border: #e5e7eb;
+    --ok: #15803d; --err: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header {
+    background: linear-gradient(135deg, #312e81, #4f46e5 60%, #7c3aed);
+    color: #fff; padding: 34px 20px 44px; text-align: center;
+  }
+  header h1 { margin: 0; font-size: 38px; letter-spacing: 0.5px; }
+  header p { margin: 8px 0 0; opacity: 0.88; font-size: 16px; }
+  .badge { display: inline-block; margin-top: 14px; padding: 4px 12px; background: rgba(255,255,255,0.18); border-radius: 20px; font-size: 12px; }
+  main { max-width: 1100px; margin: -24px auto 40px; padding: 0 16px; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); margin-bottom: 18px; }
+  .step { font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .drop { border: 2px dashed #a5b4fc; border-radius: 12px; padding: 30px 10px; text-align: center; cursor: pointer; color: var(--muted); background: #fafaff; transition: 0.2s; }
+  .drop:hover, .drop.over { background: #eef2ff; border-color: var(--primary); }
+  .drop .icon { font-size: 34px; }
+  .drop b { color: var(--primary); }
+  .info { margin-top: 14px; display: none; gap: 10px; flex-wrap: wrap; }
+  .chip { background: #eef2ff; color: var(--primary-dark); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .row .grow { flex: 1; min-width: 240px; }
+  input[type=text], input[type=password] { width: 100%; padding: 11px 12px; font-size: 15px; border: 1px solid #cfd4dc; border-radius: 8px; outline: none; }
+  input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
+  input:disabled { background: #f3f4f6; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  button { padding: 11px 18px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: var(--primary); color: #fff; transition: 0.15s; }
+  button:hover:not(:disabled) { background: var(--primary-dark); }
+  button:disabled { background: #c7c9f5; cursor: not-allowed; }
+  button.ghost { background: #eef2ff; color: var(--primary-dark); padding: 8px 14px; font-size: 13px; }
+  button.ghost:hover:not(:disabled) { background: #e0e7ff; }
+  button.final { width: 100%; margin-top: 18px; padding: 14px; font-size: 17px; background: linear-gradient(90deg, #4f46e5, #7c3aed); }
+  .bar { height: 8px; background: var(--border); border-radius: 4px; margin-top: 16px; overflow: hidden; display: none; }
+  .bar div { height: 100%; width: 0; background: linear-gradient(90deg, #4f46e5, #7c3aed); transition: width 0.15s; }
+  #msg { margin-top: 12px; font-size: 14px; min-height: 20px; }
+  .err { color: var(--err); } .ok { color: var(--ok); }
+
+  .preview-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .preview-head h2 { margin: 0; font-size: 18px; }
+  .tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; margin-top: 16px; max-height: 520px; overflow-y: auto; padding: 6px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-size: 14px; }
+  .card {
+    position: relative; border: 2px solid var(--border); border-radius: 10px; background: #fafafa;
+    padding: 6px; cursor: grab; text-align: center; transition: 0.15s; user-select: none;
+  }
+  .card:hover { border-color: #a5b4fc; box-shadow: 0 4px 12px rgba(79,70,229,0.15); }
+  .card.dragging { opacity: 0.35; }
+  .card.over { border-color: var(--primary); background: #eef2ff; transform: scale(1.04); }
+  .card .box { width: 100%; aspect-ratio: 3/4; background: #fff; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 12px; overflow: hidden; border-radius: 4px; }
+  .card img { width: 100%; height: auto; display: block; pointer-events: none; }
+  .card .pos { position: absolute; top: 9px; left: 9px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .card .del { position: absolute; top: 9px; right: 9px; width: 24px; height: 24px; border-radius: 50%; background: rgba(185,28,28,0.9); color: #fff; font-size: 12px; display: none; align-items: center; justify-content: center; cursor: pointer; }
+  .card:hover .del { display: flex; }
+  .card .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .card .foot span.btn { cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .card .foot span.btn:hover { background: #e0e7ff; color: var(--primary-dark); }
+
+  .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.65); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal.show { display: flex; }
+  .dialog { background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+  .dialog h3 { margin: 0 0 6px; }
+  .dialog p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .dialog .btns { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  #pwErr { color: var(--err); font-size: 13px; margin-top: 6px; display: none; }
+  .big { max-width: 760px; text-align: center; max-height: 94vh; overflow: auto; }
+  .big canvas { max-width: 100%; height: auto; border: 1px solid var(--border); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 30px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📑 PageCraft</h1>
+  <p>Extract. Unlock. Preview. — Get exactly the PDF pages you need.</p>
+  <span class="badge">🔒 100% private · files never leave your computer</span>
+</header>
+
+<main>
+  <!-- STEP 1 + 2 -->
+  <div class="panel">
+    <div class="step">Step 1 · Upload PDF</div>
+    <div class="drop" id="drop">
+      <div class="icon">📂</div>
+      <div><b>Click to choose a PDF</b> or drag &amp; drop it here</div>
+      <div class="hint">Large files and password-protected PDFs are supported</div>
+      <input type="file" id="file" accept="application/pdf" hidden>
+    </div>
+    <div class="info" id="info"></div>
+
+    <div class="step" style="margin-top:22px">Step 2 · Enter page numbers</div>
+    <div class="row">
+      <div class="grow">
+        <input type="text" id="pages" placeholder="e.g. 1-5, 8, 12-20" disabled>
+        <div class="hint">Use commas for separate pages and a dash for ranges. Example: 1-3, 7, 10-15</div>
+      </div>
+      <button id="previewBtn" disabled>👁 Show Output Preview</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="panel" id="outPanel" style="display:none">
+    <div class="step">Step 3 · Arrange your output</div>
+    <div class="preview-head">
+      <h2>Output Preview <span class="chip" id="countChip">0 pages</span></h2>
+      <div class="tools">
+        <button class="ghost" id="sortBtn">↕ Sort ascending</button>
+        <button class="ghost" id="revBtn">⇅ Reverse</button>
+        <button class="ghost" id="clearBtn">🗑 Clear</button>
+      </div>
+    </div>
+    <div class="hint">Drag cards with your mouse to change the order. Hover a card to remove it. Use ◀ ▶ on a card to nudge it one step.</div>
+    <div class="grid" id="grid"></div>
+
+    <button class="final" id="go" disabled>⬇ Extract &amp; Download PDF</button>
+    <div class="bar" id="bar"><div id="fill"></div></div>
+    <div id="msg2" style="margin-top:12px;font-size:14px;min-height:20px"></div>
+  </div>
+</main>
+
+<footer>PageCraft · no uploads, no servers · your files stay on your device</footer>
+
+<!-- Password dialog -->
+<div class="modal" id="pwModal">
+  <div class="dialog">
+    <h3>🔐 Password required</h3>
+    <p>This PDF is protected. Enter the password to open it.</p>
+    <input type="password" id="pwInput" placeholder="Enter password">
+    <div id="pwErr">Incorrect password. Please try again.</div>
+    <div class="btns">
+      <button class="ghost" id="pwCancel">Cancel</button>
+      <button id="pwOk">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Enlarged page -->
+<div class="modal" id="bigModal">
+  <div class="dialog big">
+    <h3 id="bigTitle">Page</h3>
+    <div id="bigBody"></div>
+    <div class="btns" style="justify-content:center">
+      <button class="ghost" id="bigClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument } = PDFLib;
+const $ = id => document.getElementById(id);
+
+const drop = $('drop'), fileInput = $('file'), info = $('info');
+const pagesInput = $('pages'), previewBtn = $('previewBtn'), goBtn = $('go');
+const msg = $('msg'), msg2 = $('msg2'), bar = $('bar'), fill = $('fill');
+const grid = $('grid'), outPanel = $('outPanel'), countChip = $('countChip');
+
+let currentFile = null, pdfDoc = null, total = 0, usedPassword = null, blobUrl = null;
+let outPages = [];            // ordered list of original page numbers
+let thumbCache = new Map();   // page -> dataURL
+let thumbPromises = new Map();
+let renderChain = Promise.resolve();
+let docToken = 0;
+let observer = null;
+let dragIdx = null;
+
+function setMsg(t, c) { msg.textContent = t; msg.className = c || ''; }
+function setMsg2(t, c) { msg2.textContent = t; msg2.className = c || ''; }
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- File selection ----------
+   Global handlers: a PDF dropped ANYWHERE on the page loads into the tool,
+   so the browser never opens it in its own viewer. */
+window.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+    drop.classList.add('over');
+  }
+});
+window.addEventListener('dragleave', e => {
+  if (!e.relatedTarget) drop.classList.remove('over');
+});
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (files && files.length) openFile(files[0]);   // internal card drags carry no files
+});
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) openFile(fileInput.files[0]);
+  fileInput.value = '';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($('bigModal').classList.contains('show')) $('bigModal').classList.remove('show');
+    else if ($('pwModal').classList.contains('show')) $('pwCancel').click();
+  }
+});
+
+/* ---------- Password dialog ---------- */
+function askPassword(wrong) {
+  return new Promise((resolve, reject) => {
+    const modal = $('pwModal'), input = $('pwInput');
+    $('pwErr').style.display = wrong ? 'block' : 'none';
+    input.value = '';
+    modal.classList.add('show');
+    setTimeout(() => input.focus(), 50);
+    const done = () => {
+      modal.classList.remove('show');
+      $('pwOk').onclick = $('pwCancel').onclick = input.onkeydown = null;
+    };
+    $('pwOk').onclick = () => { const v = input.value; done(); resolve(v); };
+    $('pwCancel').onclick = () => { done(); reject(new Error('cancelled')); };
+    input.onkeydown = e => { if (e.key === 'Enter') $('pwOk').click(); };
+  });
+}
+
+/* ---------- Open PDF (no preview is built here) ---------- */
+async function openFile(file) {
+  if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+    setMsg('Please select a PDF file.', 'err'); return;
+  }
+  resetUI();
+  setMsg('Opening PDF… large files may take a moment.');
+  blobUrl = URL.createObjectURL(file);
+  const task = pdfjsLib.getDocument({ url: blobUrl });
+  let cancelled = false;
+  task.onPassword = async (update, reason) => {
+    try {
+      const pw = await askPassword(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD);
+      usedPassword = pw;
+      update(pw);
+    } catch (e) { cancelled = true; task.destroy(); }
+  };
+  try {
+    pdfDoc = await task.promise;
+  } catch (err) {
+    if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+    setMsg(cancelled ? 'Password entry cancelled.' : 'Could not open this PDF: ' + (err.message || err), 'err');
+    return;
+  }
+  currentFile = file;
+  total = pdfDoc.numPages;
+  info.style.display = 'flex';
+  info.innerHTML =
+    `<span class="chip">📄 ${escapeHtml(file.name)}</span>` +
+    `<span class="chip">${(file.size / 1048576).toFixed(2)} MB</span>` +
+    `<span class="chip">${total} pages</span>` +
+    (usedPassword !== null ? `<span class="chip">🔓 Unlocked</span>` : '');
+  pagesInput.disabled = false;
+  previewBtn.disabled = false;
+  pagesInput.focus();
+  setMsg(`PDF ready. Enter the pages you want (1-${total}) and click "Show Output Preview".`, 'ok');
+}
+
+function resetUI() {
+  docToken++;
+  if (pdfDoc) { try { pdfDoc.destroy(); } catch (e) {} }
+  if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+  currentFile = null; pdfDoc = null; total = 0; usedPassword = null;
+  outPages = []; thumbCache.clear(); thumbPromises.clear();
+  renderChain = Promise.resolve();
+  dragIdx = null;
+  if (observer) observer.disconnect();
+  grid.innerHTML = '';
+  outPanel.style.display = 'none';
+  info.style.display = 'none';
+  pagesInput.value = ''; pagesInput.disabled = true;
+  previewBtn.disabled = true; goBtn.disabled = true;
+  bar.style.display = 'none';
+  setMsg(''); setMsg2('');
+}
+
+/* ---------- Page-number parsing ---------- */
+function parsePages(text, max) {
+  const result = [], seen = new Set();
+  const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+  if (!parts.length) throw new Error('Please enter page numbers.');
+  for (const part of parts) {
+    let m;
+    if ((m = part.match(/^(\d+)$/))) {
+      const n = +m[1];
+      if (n < 1 || n > max) throw new Error(`Page ${n} is out of range (1-${max}).`);
+      if (!seen.has(n)) { seen.add(n); result.push(n); }
+    } else if ((m = part.match(/^(\d+)\s*-\s*(\d+)$/))) {
+      const a = +m[1], b = +m[2];
+      if (a < 1 || b > max || a > b) throw new Error(`Invalid range "${part}" (allowed 1-${max}).`);
+      for (let i = a; i <= b; i++) if (!seen.has(i)) { seen.add(i); result.push(i); }
+    } else throw new Error(`Cannot understand "${part}".`);
+  }
+  return result;
+}
+
+/* ---------- Build output preview (only the selected pages) ---------- */
+previewBtn.addEventListener('click', buildPreview);
+pagesInput.addEventListener('keydown', e => { if (e.key === 'Enter') buildPreview(); });
+
+function buildPreview() {
+  if (!pdfDoc) return;
+  try { outPages = parsePages(pagesInput.value, total); }
+  catch (e) { setMsg(e.message, 'err'); return; }
+  setMsg(`Preview built with ${outPages.length} page(s). Drag to rearrange, then extract.`, 'ok');
+  setMsg2('');
+  outPanel.style.display = 'block';
+  renderGrid();
+  outPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- Thumbnails (cached, rendered one at a time) ---------- */
+function getThumb(n) {
+  if (thumbCache.has(n)) return Promise.resolve(thumbCache.get(n));
+  if (thumbPromises.has(n)) return thumbPromises.get(n);
+  const token = docToken, doc = pdfDoc;
+  const p = new Promise(resolve => {
+    renderChain = renderChain.then(async () => {
+      if (token !== docToken) return resolve(null);
+      try {
+        const page = await doc.getPage(n);
+        const vp0 = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: 240 / vp0.width });
+        const c = document.createElement('canvas');
+        c.width = vp.width; c.height = vp.height;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const url = c.toDataURL('image/jpeg', 0.75);
+        page.cleanup();
+        if (token === docToken) thumbCache.set(n, url);
+        resolve(url);
+      } catch (e) { resolve(null); }
+    });
+  });
+  thumbPromises.set(n, p);
+  p.then(() => thumbPromises.delete(n));
+  return p;
+}
+
+/* ---------- Render the output grid ---------- */
+function renderGrid() {
+  if (observer) observer.disconnect();
+  grid.innerHTML = '';
+  dragIdx = null;
+  countChip.textContent = `${outPages.length} page${outPages.length === 1 ? '' : 's'}`;
+  goBtn.disabled = outPages.length === 0;
+
+  if (!outPages.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No pages in the output. Enter page numbers above and click "Show Output Preview".</div>';
+    return;
+  }
+
+  observer = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const card = en.target;
+      observer.unobserve(card);
+      const n = +card.dataset.page;
+      getThumb(n).then(url => {
+        const box = card.querySelector('.box');
+        if (url && box) box.innerHTML = `<img src="${url}" alt="Page ${n}">`;
+        else if (box) box.textContent = 'Preview unavailable';
+      });
+    });
+  }, { root: grid, rootMargin: '300px' });
+
+  outPages.forEach((n, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.draggable = true;
+    card.dataset.page = n;
+    card.dataset.idx = idx;
+    card.innerHTML =
+      `<div class="pos">${idx + 1}</div>` +
+      `<div class="del" title="Remove from output">✕</div>` +
+      `<div class="box">Loading…</div>` +
+      `<div class="foot"><span class="btn" data-act="left" title="Move earlier">◀</span>` +
+      `<span class="btn" data-act="zoom" title="Enlarge">Pg ${n} 🔍</span>` +
+      `<span class="btn" data-act="right" title="Move later">▶</span></div>`;
+
+    card.addEventListener('click', e => {
+      const t = e.target;
+      if (t.classList.contains('del')) { outPages.splice(idx, 1); renderGrid(); return; }
+      const act = t.dataset && t.dataset.act;
+      if (act === 'left') move(idx, idx - 1);
+      else if (act === 'right') move(idx, idx + 1);
+      else if (act === 'zoom') showBig(n);
+    });
+
+    card.addEventListener('dragstart', e => {
+      dragIdx = idx;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(idx));
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      grid.querySelectorAll('.over').forEach(c => c.classList.remove('over'));
+      dragIdx = null;
+    });
+    card.addEventListener('dragover', e => {
+      if (dragIdx === null) return;
+      e.preventDefault();
+      card.classList.add('over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      card.classList.remove('over');
+      if (dragIdx === null || dragIdx === idx) return;
+      move(dragIdx, idx);
+    });
+
+    grid.appendChild(card);
+    observer.observe(card);
+  });
+}
+
+function move(from, to) {
+  if (to < 0 || to >= outPages.length || from === to) return;
+  const keep = grid.scrollTop;
+  const [item] = outPages.splice(from, 1);
+  outPages.splice(to, 0, item);
+  renderGrid();
+  grid.scrollTop = keep;
+}
+
+$('sortBtn').onclick = () => { outPages.sort((a, b) => a - b); renderGrid(); };
+$('revBtn').onclick = () => { outPages.reverse(); renderGrid(); };
+$('clearBtn').onclick = () => { outPages = []; renderGrid(); };
+
+/* ---------- Enlarged view ---------- */
+async function showBig(n) {
+  $('bigTitle').textContent = `Original page ${n}`;
+  $('bigBody').textContent = 'Rendering…';
+  $('bigModal').classList.add('show');
+  try {
+    const page = await pdfDoc.getPage(n);
+    const vp = page.getViewport({ scale: 1.5 });
+    const c = document.createElement('canvas');
+    c.width = vp.width; c.height = vp.height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    $('bigBody').innerHTML = ''; $('bigBody').appendChild(c);
+  } catch (e) { $('bigBody').textContent = 'Could not render this page.'; }
+}
+$('bigClose').onclick = () => $('bigModal').classList.remove('show');
+$('bigModal').addEventListener('click', e => { if (e.target.id === 'bigModal') $('bigModal').classList.remove('show'); });
+
+/* ---------- Final extraction ---------- */
+goBtn.addEventListener('click', async () => {
+  if (!pdfDoc || !outPages.length) return;
+  const nums = outPages.slice();
+  goBtn.disabled = true;
+  bar.style.display = 'block'; fill.style.width = '0%';
+  setMsg2('Extracting pages…');
+  try {
+    let bytes, mode;
+    try {
+      bytes = await extractLossless(nums);
+      mode = 'lossless';
+    } catch (e) {
+      if (/encrypt/i.test(e.message) || usedPassword !== null) {
+        setMsg2('Protected PDF: rebuilding selected pages in high quality…');
+        fill.style.width = '0%';
+        bytes = await extractRaster(nums);
+        mode = 'raster';
+      } else throw e;
+    }
+    download(bytes, currentFile.name.replace(/\.pdf$/i, '') + '_extracted.pdf');
+    fill.style.width = '100%';
+    setMsg2(`Done! ${nums.length} page(s) downloaded in your chosen order.` +
+      (mode === 'raster' ? ' (Pages were rebuilt as images because the source was password-protected, so text is not selectable.)' : ''), 'ok');
+  } catch (err) {
+    console.error(err);
+    setMsg2('Error: ' + (err.message || err), 'err');
+  } finally {
+    goBtn.disabled = outPages.length === 0;
+  }
+});
+
+async function extractLossless(nums) {
+  const buf = await currentFile.arrayBuffer();
+  const src = await PDFDocument.load(buf); // throws if encrypted
+  const out = await PDFDocument.create();
+  const chunk = 25;
+  for (let i = 0; i < nums.length; i += chunk) {
+    const slice = nums.slice(i, i + chunk).map(n => n - 1);
+    const pages = await out.copyPages(src, slice);
+    pages.forEach(p => out.addPage(p));
+    fill.style.width = Math.round(((i + slice.length) / nums.length) * 100) + '%';
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return await out.save();
+}
+
+async function extractRaster(nums) {
+  const out = await PDFDocument.create();
+  for (let i = 0; i < nums.length; i++) {
+    const page = await pdfDoc.getPage(nums[i]);
+    const vp1 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: 2.5 });
+    const c = document.createElement('canvas');
+    c.width = vp.width; c.height = vp.height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+    const img = await out.embedJpg(await blob.arrayBuffer());
+    const p = out.addPage([vp1.width, vp1.height]);
+    p.drawImage(img, { x: 0, y: 0, width: vp1.width, height: vp1.height });
+    c.width = c.height = 0; page.cleanup();
+    fill.style.width = Math.round(((i + 1) / nums.length) * 100) + '%';
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return await out.save();
+}
+
+function download(bytes, name) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+</script>
+</body>
+</html>
